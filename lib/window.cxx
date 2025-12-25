@@ -9,11 +9,12 @@ namespace lvichki {
 class Window {
 public:
     int width = 1080;
-    int height = 2184;
+    int height = 1340; // 2184
     float dt = 0.0f;
     float fps = 0.0f;
 
     bool show_fps = true;  // По умолчанию показываем FPS
+    bool fixed_delta_time = false;
 
     std::function<void()> on_update = [](){};
     std::function<void()> on_draw   = [](){};
@@ -44,12 +45,13 @@ public:
         }
 
         // === ШРИФТ ПО УМОЛЧАНИЮ ===
-        // Твой путь с телефона — вшиваем прямо сюда
-        font = TTF_OpenFont("/storage/emulated/0/Download/freesans/FreeSans.ttf", 32);
+        font = TTF_OpenFont("FreeSans.ttf", 32);
+        if (!font) {
+            font = TTF_OpenFont("/storage/emulated/0/Download/freesans/FreeSans.ttf", 32);
+        }
         if (!font) {
             SDL_Log("Не удалось загрузить шрифт по умолчанию: %s", TTF_GetError());
             SDL_Log("Текст (включая FPS) не будет отображаться.");
-            // Программа продолжит работать без шрифта
         }
 
         // FPS счётчик
@@ -78,6 +80,9 @@ public:
                 if (e.type == SDL_QUIT) {
                     running = false;
                 }
+                if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) {
+                    running = false;
+                }
             }
 
             update_delta_and_fps();
@@ -96,6 +101,11 @@ public:
             }
 
             SDL_RenderPresent(renderer);
+
+            if (fixed_delta_time) {
+                SDL_Delay(16); // ~60 FPS
+            }
+            
         }
     }
 
