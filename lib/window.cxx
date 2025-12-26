@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <functional>
 #include "vec2.cxx"
+using namespace std;
 
 namespace lvichki {
 
@@ -11,16 +12,15 @@ class Window {
 public:
     int width = 1080;
     int height = 1340; // 2184
-    float dt = 0.0f;
+    float dt = 0;
     float fps = 0.0f;
-
     bool show_fps = true;  // По умолчанию показываем FPS
-    bool fixed_delta_time = false;
-
-    std::function<void()> on_update = [](){};
-    std::function<void()> on_draw   = [](){};
-    std::function<void(const SDL_Event&)> on_event = [](const SDL_Event&){};
-
+    const float fixed_dt = 1.0f / 60.0f; // Фиксированный шаг времени для физики
+    function<void()> on_update = [](){};
+    function<void()> on_draw   = [](){};
+    function<void(const SDL_Event&)> on_event = [](const SDL_Event&){};
+    uint64_t update_count = 0;
+    uint64_t draw_count = 0;
 
     Window() {
         if (SDL_Init(SDL_INIT_VIDEO) < 0) {
@@ -77,8 +77,20 @@ public:
 
         bool running = true;
         SDL_Event e;
+        
+        float accumulator = 0.0f;
+        Uint32 last_time = SDL_GetTicks();
 
         while (running) {
+            update_delta_and_fps();
+            dbg_print_frames();
+            Uint32 now = SDL_GetTicks();
+            float frame_time = (now - last_time) / 1000.0f;
+            if (frame_time > 0.25f) frame_time = 0.25f; // "Защита от спирали смерти"
+            last_time = now;
+
+            accumulator += frame_time;
+
             while (SDL_PollEvent(&e)) {
                 if (e.type == SDL_QUIT) {
                     running = false;
@@ -89,13 +101,18 @@ public:
                 on_event(e);
             }
 
-            update_delta_and_fps();
+            
+            // Пока накопилось достаточно времени, крутим физику
+            while (accumulator >= fixed_dt) {
+                if (on_update) on_update();
+                update_count++;
+                accumulator -= fixed_dt;
+            }
 
+            draw_count++;
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
             SDL_RenderClear(renderer);
-
-            if (on_update) on_update();
-            if (on_draw)   on_draw();
+            if (on_draw) on_draw();
 
             // Автоматический FPS
             if (show_fps && font) {
@@ -105,11 +122,6 @@ public:
             }
 
             SDL_RenderPresent(renderer);
-
-            if (fixed_delta_time) {
-                SDL_Delay(16); // ~60 FPS
-            }
-            
         }
     }
 
@@ -170,11 +182,9 @@ private:
     SDL_Window*   window = nullptr;
     SDL_Renderer* renderer = nullptr;
     TTF_Font*     font = nullptr;
-
     Uint32 fps_start_time = 0;
     Uint32 last_frame_time = 0;
     int    fps_frames = 0;
-
     bool is_valid = false;
 
     void update_delta_and_fps() {
@@ -189,6 +199,19 @@ private:
 
         dt = (now - last_frame_time) / 1000.0f;
         last_frame_time = now;
+    }
+
+    void dbg_print_frames() {
+        static Uint32 log_timer = 0;
+        Uint32 now = SDL_GetTicks();
+        if (now - log_timer >= 1000) {
+            SDL_Log("PHYS updates/sec: %llu", update_count);
+            SDL_Log("RENDER frames/sec: %llu  (shown FPS: %.1f)", draw_count, fps);
+            SDL_Log("Ratio draw/update: %.1f", (float)draw_count / update_count);
+            update_count = 0;
+            draw_count = 0;
+            log_timer = now;
+        }
     }
 };
 
