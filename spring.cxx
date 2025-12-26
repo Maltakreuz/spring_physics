@@ -19,20 +19,15 @@ int main(int argc, char *argv[]) {
     lvichki::Window win;
     win.fixed_delta_time = false;
     
-    
     SDL_Color white = {255, 255, 255, 255};
     SDL_Color purple = {150, 100, 255, 255};
-    Vec2 gravity(0, .75f);
-    
-
+    Vec2 gravity(0, 2000.0f);
     
     Spring spring;
     spring.anchor = { win.width / 2.0f, win.height / 2.0f };
     spring.bob = { win.width / 2.0f + 200, win.height / 2.0f + 200};
     spring.restLength = 350;
-    spring.stiffness = 0.051f;
-
-    int dbg_step = 0;
+    spring.stiffness = 50.0f;
 
     win.on_update = [&]() {
         Vec2 spring_force = spring.bob - spring.anchor;
@@ -44,12 +39,15 @@ int main(int argc, char *argv[]) {
 
         spring.velocity += acc * win.dt;
         spring.velocity +=  gravity * win.dt;
-        spring.bob += spring.velocity;
+        spring.bob += spring.velocity * win.dt;
         spring.velocity *= 0.999f;
 
-        char buf[32];
-        sprintf(buf, "extension: %.1f", extension);
-        win.draw_text(buf, 30, 70);
+        int y = 55;
+        win.draw_text( ("extension: " + to_string(extension)).c_str(), 30, y += 30);
+        win.draw_text( ("dt: " + to_string(win.dt)).c_str(), 30, y += 30);
+        win.draw_text( ("velocity: " + to_string(spring.velocity.x) + ", " + to_string(spring.velocity.y)).c_str(), 30, y += 30);
+        win.draw_text( ("spring_force: (" + to_string(spring_force.x) + ", " + to_string(spring_force.y) + ")" ).c_str(), 30, y += 30);
+
     };
 
     win.on_draw = [&]() {
@@ -57,7 +55,6 @@ int main(int argc, char *argv[]) {
         win.draw_circle((int)spring.anchor.x, (int)spring.anchor.y, radius, purple);
         win.draw_circle((int)spring.bob.x, (int)spring.bob.y, radius, white);
         win.draw_line(spring.anchor, spring.bob, purple);
-        
     };
     
     win.on_event = [&](const SDL_Event& e) {
