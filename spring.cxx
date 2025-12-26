@@ -85,11 +85,6 @@ int main(int argc, char *argv[]) {
        
         spring.bob += spring.velocity * win.fixed_dt;
 
-        // just optics, make color dynamicly
-        float abs_ext = abs(spring.extension);
-        Uint8 intensity = (Uint8)mapValue(abs_ext, 0.0f, 400.0f, 0.0f, 255.0f);
-        extension_color = {255, (Uint8)(255 - intensity), (Uint8)(255 - intensity), 255};
-
         if (hold_by_mouse_or_finger) {
             spring.bob.x = hold_x;
             spring.bob.y = hold_y;
@@ -99,6 +94,11 @@ int main(int argc, char *argv[]) {
     };
 
     win.on_draw = [&]() {
+        // just optics, make color dynamicly
+        float abs_ext = abs(spring.extension);
+        Uint8 intensity = (Uint8)mapValue(abs_ext, 0.0f, 400.0f, 0.0f, 255.0f);
+        extension_color = {255, (Uint8)(255 - intensity), (Uint8)(255 - intensity), 255};
+
         int radius = 24;
         win.draw_circle((int)spring.anchor.x, (int)spring.anchor.y, radius, purple);
         win.draw_circle((int)spring.bob.x, (int)spring.bob.y, radius, white);
