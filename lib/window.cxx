@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdio>
 #include <functional>
+#include "vec2.cxx"
 
 namespace lvichki {
 
@@ -18,6 +19,8 @@ public:
 
     std::function<void()> on_update = [](){};
     std::function<void()> on_draw   = [](){};
+    std::function<void(const SDL_Event&)> on_event = [](const SDL_Event&){};
+
 
     Window() {
         if (SDL_Init(SDL_INIT_VIDEO) < 0) {
@@ -83,6 +86,7 @@ public:
                 if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) {
                     running = false;
                 }
+                on_event(e);
             }
 
             update_delta_and_fps();
@@ -153,7 +157,7 @@ public:
     }
 }
 
-void draw_line(SDL_FPoint a, SDL_FPoint b, SDL_Color color ) {
+void draw_line(Vec2 a, Vec2 b, SDL_Color color ) {
     SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
     int x0 = (int) a.x;
     int y0 = (int) a.y;
