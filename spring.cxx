@@ -8,9 +8,10 @@ using namespace std;
 struct Spring {
     Vec2 anchor;
     Vec2 bob;
+    Vec2 velocity;
+    float mass = 1.0f;
     float restLength;
     float stiffness;
-    Vec2 velocity;
 };
 
 int main(int argc, char *argv[]) {
@@ -34,17 +35,17 @@ int main(int argc, char *argv[]) {
     int dbg_step = 0;
 
     win.on_update = [&]() {
-         Vec2 force = spring.bob - spring.anchor;
-         float extension = force.length() - spring.restLength;
-         force.normalize();
-         force *= -spring.stiffness * extension * win.dt;
-        spring.velocity += force;
+        Vec2 spring_force = spring.bob - spring.anchor;
+        float extension = spring_force.length() - spring.restLength;
+        spring_force.normalize();
+        spring_force *= -spring.stiffness * extension;
+
+        Vec2 acc = spring_force / spring.mass;
+
+        spring.velocity += acc * win.dt;
         spring.velocity +=  gravity * win.dt;
         spring.bob += spring.velocity;
-        
         spring.velocity *= 0.999f;
-
-        
 
         char buf[32];
         sprintf(buf, "extension: %.1f", extension);
