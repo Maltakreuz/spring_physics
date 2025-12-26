@@ -21,7 +21,7 @@ int main(int argc, char *argv[]) {
     
     SDL_Color white = {255, 255, 255, 255};
     SDL_Color purple = {150, 100, 255, 255};
-    Vec2 gravity(0, 1.0f);
+    Vec2 gravity(0, .75f);
     
 
     
@@ -60,32 +60,29 @@ int main(int argc, char *argv[]) {
     };
     
     win.on_event = [&](const SDL_Event& e) {
-    float fx = 0, fy = 0;
-    bool should_update = false;
-
-    if (e.type == SDL_FINGERDOWN || e.type == SDL_FINGERMOTION) {
-        fx = e.tfinger.x * win.width;
-        fy = e.tfinger.y * win.height;
-        should_update = true;
-    }
-    else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
-        fx = e.button.x;
-        fy = e.button.y;
-        should_update = true;
-    }
-    else if (e.type == SDL_MOUSEMOTION && (e.motion.state & SDL_BUTTON_LMASK)) {
-        // SDL_BUTTON_LMASK значит: левая кнопка зажата во время движения
-        fx = e.motion.x;
-        fy = e.motion.y;
-        should_update = true;
-    }
-
-    if (should_update) {
-        spring.bob.x = fx;
-        spring.bob.y = fy;
-        spring.velocity = {0, 0};
-    }
-};
+        float fx = 0, fy = 0;
+        bool should_update = false;
+        if (e.type == SDL_FINGERDOWN || e.type == SDL_FINGERMOTION) {
+            fx = e.tfinger.x * win.width;
+            fy = e.tfinger.y * win.height;
+            should_update = true;
+        }
+        else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+            fx = e.button.x;
+            fy = e.button.y;
+            should_update = true;
+        }
+        else if (e.type == SDL_MOUSEMOTION && (e.motion.state & SDL_BUTTON_LMASK)) {
+            fx = e.motion.x;
+            fy = e.motion.y;
+            should_update = true;
+        }
+        if (should_update) {
+            spring.bob.x = fx;
+            spring.bob.y = fy;
+            spring.velocity = {0, 0};
+        }
+    };
 
     win.run();
     return 0;

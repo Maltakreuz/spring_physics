@@ -1,4 +1,5 @@
 #pragma once
+#include <ostream>
 
 struct Vec2 {
     float x, y;
@@ -51,8 +52,17 @@ struct Vec2 {
     }
     
     Vec2 operator/(float scalar) const {
-    return Vec2(x / scalar, y / scalar);
-}
+        if (scalar == 0) return Vec2(0, 0);
+        return Vec2(x / scalar, y / scalar);
+    }
+
+    bool operator==(const Vec2& other) const {
+        return x == other.x && y == other.y;
+    }
+
+    Vec2 operator-() const {
+        return Vec2(-x, -y);
+    }
 
     Vec2 normalized() const {
         float len = length();
@@ -70,3 +80,7 @@ struct Vec2 {
     }
 };
 
+inline std::ostream& operator<<(std::ostream& os, const Vec2& v) {
+    os << "(" << v.x << ", " << v.y << ")";
+    return os;
+}
