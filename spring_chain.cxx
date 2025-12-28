@@ -4,7 +4,11 @@
 #include "lib/vec2.cxx"
 #include <iostream>
 #include <vector>
+#include <sstream>
+#include <iomanip>
+
 using namespace std;
+
 
 /*
  - основано на видео от Coding Train
@@ -38,77 +42,67 @@ SDL_Color white = {255, 255, 255, 255};
 SDL_Color purple = {150, 100, 255, 255};
 
 const int max_trail_points = 500; // Длина шлейфа в кадрах
+float damping = 0.995f;
+float gravity = 000.0f;
 
-struct Spring {
-    Vec2 anchor;
-    Vec2 bob;
-    Vec2 velocity;
+struct Particle {
+    Vec2 pos;
+    Vec2 vel;
+    Vec2 acc;
     float mass = 1.0f;
-    float restLength;
-    float stiffness;
-    float extension;
-};
+    bool locked;
+    float radius = 24.0f;
 
-float dbg_max_force_seen = 0.0f;
+    vector<Vec2> trail;
 
-int main(int, char**) {
-    cout << "=== START SPRING SIMULATON ===" << endl;
-    lvichki::Window win;
-    
+    Particle() : pos(0, 0), vel(0, 0), acc(0, 0), mass(1.0f), locked(false) {}
+    Particle(float x, float y) : pos(x, y), vel(0, 0), acc(0, 0), mass(1.0f), locked(false) {}
 
-    float gravity = 1000.0f;
-    
-    Spring spring;
-    spring.anchor = { win.width / 2.0f, win.height / 2.0f };
-    spring.bob = { win.width / 2.0f + 200, win.height / 2.0f + 200};
-    spring.restLength = 200;
-    spring.stiffness = 100; // чем меньше тем более медленная и "тугая" пружина. Чем выше, тем более она быстро колеблется и более свободная
-
-    std::vector<Vec2> trail;
-
-    win.on_update = [&]() {
-        /**
-         * calc spring force, the core of this example, based on
-         * Hooke's law: F = -k * x
-         * where x is extension, k is stiffness and F is spring force */
-        Vec2 spring_force = spring.bob - spring.anchor;
-        spring.extension = spring_force.length() - spring.restLength;
-        spring_force.normalize();
-        spring_force *= -spring.stiffness * spring.extension;
-
+    void update(lvichki::Window& game) {
+        if (locked) return;
+        
+        vel *= damping;
         // semi-euler integration (first velocity, then position)
-        Vec2 acc = spring_force / spring.mass;
-        spring.velocity += acc * win.fixed_dt;
-        spring.velocity.y +=  gravity * win.fixed_dt;
-        spring.velocity *= 0.995f;
-       
-        spring.bob += spring.velocity * win.fixed_dt;
+        vel += acc * game.fixed_dt;
+        vel.y += gravity * game.fixed_dt;
+        pos += vel * game.fixed_dt;
+        acc = {0, 0};
 
-        if (hold_by_mouse_or_finger) {
-            spring.bob.x = hold_x;
-            spring.bob.y = hold_y;
-            spring.velocity = {0, 0};
+        bounceOnWindowRect(game);
+        update_trail();
+    }
+
+
+
+    void draw(lvichki::Window& game) {
+        game.draw_circle((int)pos.x, (int)pos.y, radius, purple);
+        draw_trail(game);
+    }
+
+    void applyForce(const Vec2& force) {
+        acc += force / mass;
+    }
+
+    void bounceOnWindowRect(lvichki::Window& game) {
+        if (pos.x < 0) {
+            pos.x = 0;
+            vel.x *= -damping;
         }
-
-        // Добавляем текущую позицию в "историю"
-        trail.push_back(spring.bob);
-
-        // Если хвост стал слишком длинным, удаляем самую старую точку
-        if (trail.size() > max_trail_points) {
-            trail.erase(trail.begin());
+        if (pos.x > game.width) {
+            pos.x = game.width;
+            vel.x *= -damping;
         }
-
-        float current_force_mag = spring_force.length(); 
-        if (current_force_mag > dbg_max_force_seen) {
-            dbg_max_force_seen = current_force_mag;
+        if (pos.y < 0) {
+            pos.y = 0;
+            vel.y *= -damping;
         }
+        if (pos.y > game.height) {
+            pos.y = game.height;
+            vel.y *= -damping;
+        }
+    }
 
-    };
-
-    win.on_draw = [&]() {
-        // Включаем режим смешивания цветов для прозрачности
-        SDL_SetRenderDrawBlendMode(win.get_renderer(), SDL_BLENDMODE_BLEND);
-
+    void draw_trail(lvichki::Window& game) {
         if (trail.size() > 1) {
             for (size_t i = 0; i < trail.size() - 1; ++i) {
                 // Вычисляем прозрачность (от 0 до 255)
@@ -116,42 +110,102 @@ int main(int, char**) {
                 // i=size-1 (у самого грузика) -> яркий
                 Uint8 alpha = (Uint8)((i * 255) / trail.size());
                 
-                SDL_Color t_color = {255, 255, 255, alpha}; // Белый хвост
+                Uint8 whitness = 128;
+                SDL_Color t_color = {whitness, whitness, whitness, alpha}; // Белый хвост
                 
                 // Рисуем отрезок между двумя соседними точками истории
-                win.draw_line(trail[i], trail[i+1], t_color);
+                game.draw_line(trail[i], trail[i+1], t_color);
             }
         }
+    }
 
+    void update_trail() {
+        // Добавляем текущую позицию в "историю"
+        trail.push_back(pos);
+        // Если хвост стал слишком длинным, удаляем самую старую точку
+        if (trail.size() > max_trail_points) {
+            trail.erase(trail.begin());
+        }
+    }
+
+
+};
+
+struct SpringJoint {
+    Particle anchor;
+    Particle bob;
+    float restLength;
+    float stiffness;
+    float extension;
+
+    
+
+    void update(lvichki::Window& game) {
+        /**
+         * calc spring force, the core of this example, based on
+         * Hooke's law: F = -k * x
+         * where x is extension, k is stiffness and F is spring force */
+        Vec2 spring_force = bob.pos - anchor.pos;
+        extension = spring_force.length() - restLength;
+        spring_force.normalize();
+        spring_force *= -stiffness * extension;
+
+        anchor.applyForce(-spring_force);
+        bob.applyForce(spring_force);
+
+        bob.update(game);
+        anchor.update(game);
+
+
+
+    }
+
+    void draw(lvichki::Window& game) {
+        // Включаем режим смешивания цветов для прозрачности
+        SDL_SetRenderDrawBlendMode(game.get_renderer(), SDL_BLENDMODE_BLEND);
         // just optics, make color dynamicly
-        float abs_ext = abs(spring.extension);
+        float abs_ext = abs(extension);
         Uint8 intensity = (Uint8)mapValue(abs_ext, 0.0f, 400.0f, 0.0f, 255.0f);
         extension_color = {255, (Uint8)(255 - intensity), (Uint8)(255 - intensity), 255};
 
-        int radius = 24;
-        win.draw_circle((int)spring.anchor.x, (int)spring.anchor.y, radius, purple);
-        win.draw_circle((int)spring.bob.x, (int)spring.bob.y, radius, white);
-        win.draw_line(spring.anchor, spring.bob, extension_color);
-
-        // draw debug info
-        int y = 55;
-        //win.draw_text( ("extension: " + to_string(spring.extension)).c_str(), 30, y += 30);
-        //win.draw_text( ("dt: " + to_string(win.dt)).c_str(), 30, y += 30);
-        win.draw_text( ("velocity: " + to_string(spring.velocity.x) + ", " + to_string(spring.velocity.y)).c_str(), 30, y += 30);
+        bob.draw(game);
+        anchor.draw(game);
+        game.draw_line(anchor.pos, bob.pos, extension_color);
+    }
 
 
-        win.draw_text("Q/W to adjust stiffness, A/S gravity, R/T rest length", 30, y += 30, purple);
-        win.draw_text( ("stiffness: " + to_string((int) spring.stiffness)).c_str(), 30, y += 30);
-        win.draw_text( ("gravity: " + to_string((int) gravity)).c_str(), 30, y += 30);
-        win.draw_text( ("rest length: " + to_string((int) spring.restLength)).c_str(), 30, y += 30);
-        win.draw_text( ("max force seen: " + to_string((int)(dbg_max_force_seen / 1000)) + "k").c_str(), 30, y += 30, purple);
+};
+
+void dbg_draw_info(lvichki::Window& game, SpringJoint& spring);
+
+int main(int, char**) {
+    cout << "=== START SPRING SIMULATON ===" << endl;
+    lvichki::Window game;
+    SpringJoint spring;
+    spring.anchor = { game.width / 2.0f, game.height / 2.0f };
+    spring.bob = { game.width / 2.0f + 200, game.height / 2.0f + 200};
+    spring.restLength = 200;
+    spring.stiffness = 100; // чем меньше тем более медленная и "тугая" пружина. Чем выше, тем более она быстро колеблется и более свободная
+
+    game.on_update = [&]() {
+        spring.update(game);
+        if (hold_by_mouse_or_finger) {
+            spring.bob.pos.x = hold_x;
+            spring.bob.pos.y = hold_y;
+            spring.bob.vel = {0, 0};
+        }
+    };
+
+    game.on_draw = [&]() {
+        spring.draw(game);
+        dbg_draw_info(game, spring);
     };
     
-    win.on_event = [&](const SDL_Event& e) {
+    game.on_event = [&](const SDL_Event& e) {
         hold_by_mouse_or_finger = false;
         if (e.type == SDL_FINGERDOWN || e.type == SDL_FINGERMOTION) {
-            hold_x = e.tfinger.x * win.width;
-            hold_y = e.tfinger.y * win.height;
+            hold_x = e.tfinger.x * game.width;
+            hold_y = e.tfinger.y * game.height;
             hold_by_mouse_or_finger = true;
         }
         else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
@@ -189,6 +243,19 @@ int main(int, char**) {
 
     };
 
-    win.run();
+    game.run();
     return 0;
+}
+
+void dbg_draw_info(lvichki::Window& game, SpringJoint& spring) {
+    int y = 55;
+    //game.draw_text( ("extension: " + to_string(spring.extension)).c_str(), 30, y += 30);
+    //game.draw_text( ("dt: " + to_string(game.dt)).c_str(), 30, y += 30);
+    stringstream ss;
+    ss << fixed << setprecision(2) << "velocity: " << spring.bob.vel.x << ", " << spring.bob.vel.y;
+    game.draw_text(ss.str().c_str(), 30, y += 30);
+    game.draw_text("Q/W to adjust stiffness, A/S gravity, R/T rest length", 30, y += 30, purple);
+    game.draw_text( ("stiffness: " + to_string((int) spring.stiffness)).c_str(), 30, y += 30);
+    game.draw_text( ("gravity: " + to_string((int) gravity)).c_str(), 30, y += 30);
+    game.draw_text( ("rest length: " + to_string((int) spring.restLength)).c_str(), 30, y += 30);
 }

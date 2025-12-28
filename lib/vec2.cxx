@@ -84,3 +84,11 @@ inline std::ostream& operator<<(std::ostream& os, const Vec2& v) {
     os << "(" << v.x << ", " << v.y << ")";
     return os;
 }
+
+// Функция для преобразования диапазона (как map() в Arduino или Processing)
+float mapValue(float val, float in_min, float in_max, float out_min, float out_max) {
+    // Ограничиваем входное значение, чтобы цвет не "сломался" за пределами диапазона
+    if (val < in_min) val = in_min;
+    if (val > in_max) val = in_max;
+    return out_min + (out_max - out_min) * ((val - in_min) / (in_max - in_min));
+}

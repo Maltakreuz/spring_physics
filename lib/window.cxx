@@ -7,7 +7,7 @@
 using namespace std;
 
 namespace lvichki {
-
+// TODO: rename it into game, it fits better + shift draw lines and circles code to separate file
 class Window {
 public:
     int width = 1080;
@@ -83,7 +83,7 @@ public:
 
         while (running) {
             update_delta_and_fps();
-            dbg_print_frames();
+            //dbg_print_frames();
             Uint32 now = SDL_GetTicks();
             float frame_time = (now - last_time) / 1000.0f;
             if (frame_time > 0.25f) frame_time = 0.25f; // "Защита от спирали смерти"
