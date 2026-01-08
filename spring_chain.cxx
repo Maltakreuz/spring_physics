@@ -9,12 +9,10 @@
 
 using namespace std;
 
-
 /*
  - основано на видео от Coding Train
- - это первая часть из этого видео где 1 пружина (на векторах, тоесть двигается в 2d-направлении, а не только в одном)
+ - это третяя часть из этого видео где много пружин объедины в подобие цепочки
  - Работает на основе закона Хука: "как разтяжение, так и сила"
- - Сама суть кода в объявлении структуры Spring + начало кода в udpate().
 
  Какие были проблемы при написании:
  - вечно была проблема с тем чтобы учитывать dt, при интеграции и при гашении скорости. Если её забыть, то возможны мутные проблемы. Вообще может в таких примерах стоит просто использовать фиксированный timestap и всё тут. Чтоб не возиться с dt.
@@ -43,7 +41,11 @@ SDL_Color purple = {150, 100, 255, 255};
 
 const int max_trail_points = 500; // Длина шлейфа в кадрах
 float damping = 0.995f;
-float gravity = 000.0f;
+float gravity = 30.0f;
+float restLength = 10.0f;
+float stiffness = 10.0f;
+int segments_no = 24;
+bool do_draw_trail = false;
 
 struct Particle {
     Vec2 pos;
@@ -51,7 +53,7 @@ struct Particle {
     Vec2 acc;
     float mass = 1.0f;
     bool locked;
-    float radius = 24.0f;
+    float radius = 6.0f;
 
     vector<Vec2> trail;
 
@@ -72,11 +74,11 @@ struct Particle {
         update_trail();
     }
 
-
-
     void draw(lvichki::Window& game) {
         game.draw_circle((int)pos.x, (int)pos.y, radius, purple);
-        draw_trail(game);
+        if (do_draw_trail) {
+            draw_trail(game);
+        }
     }
 
     void applyForce(const Vec2& force) {
@@ -127,32 +129,25 @@ struct Particle {
             trail.erase(trail.begin());
         }
     }
-
-
 };
 
 struct SpringJoint {
-    Particle anchor;
-    Particle bob;
-    float restLength;
-    float stiffness;
+    Particle* anchor;
+    Particle* bob;
     float extension;
 
-    void update(lvichki::Window& game) {
+    void update() {
         /**
          * calc spring force, the core of this example, based on
          * Hooke's law: F = -k * x
          * where x is extension, k is stiffness and F is spring force */
-        Vec2 spring_force = bob.pos - anchor.pos;
+        Vec2 spring_force = bob->pos - anchor->pos;
         extension = spring_force.length() - restLength;
         spring_force.normalize();
         spring_force *= -stiffness * extension;
 
-        anchor.applyForce(-spring_force);
-        bob.applyForce(spring_force);
-
-        bob.update(game);
-        anchor.update(game);
+        anchor->applyForce(-spring_force);
+        bob->applyForce(spring_force);
     }
 
     void draw(lvichki::Window& game) {
@@ -163,35 +158,63 @@ struct SpringJoint {
         Uint8 intensity = (Uint8)mapValue(abs_ext, 0.0f, 400.0f, 0.0f, 255.0f);
         extension_color = {255, (Uint8)(255 - intensity), (Uint8)(255 - intensity), 255};
 
-        bob.draw(game);
-        anchor.draw(game);
-        game.draw_line(anchor.pos, bob.pos, extension_color);
+        bob->draw(game);
+        anchor->draw(game);
+        game.draw_line(anchor->pos, bob->pos, extension_color);
     }
 };
 
-void dbg_draw_info(lvichki::Window& game, SpringJoint& spring);
+
+void dbg_draw_info(lvichki::Window& game);
 
 int main(int, char**) {
     cout << "=== START SPRING SIMULATON ===" << endl;
     lvichki::Window game;
-    SpringJoint spring;
-    spring.anchor = { game.width / 2.0f, game.height / 2.0f };
-    spring.bob = { game.width / 2.0f + 200, game.height / 2.0f + 200};
-    spring.restLength = 200;
-    spring.stiffness = 100; // чем меньше тем более медленная и "тугая" пружина. Чем выше, тем более она быстро колеблется и более свободная
+
+    
+    vector<Particle> particles;
+    particles.reserve(segments_no);
+
+    float startX = game.width / 2.0f;
+    float startY = 100.0f;
+
+    for (int i = 0; i < segments_no; i++) {
+        particles.emplace_back(startX, startY + i * restLength);
+    }
+
+    particles[0].locked = true;
+
+    vector<SpringJoint> springs;
+    springs.reserve(segments_no - 1);
+
+    for (int i = 0; i < segments_no - 1; i++) {
+        springs.push_back({ &particles[i], &particles[i+1], 0 });
+    }
 
     game.on_update = [&]() {
-        spring.update(game);
+        for (auto& spring : springs) {
+            spring.update();
+        }
+        for (auto& p : particles) {
+            p.update(game);
+        }
         if (hold_by_mouse_or_finger) {
-            spring.bob.pos.x = hold_x;
-            spring.bob.pos.y = hold_y;
-            spring.bob.vel = {0, 0};
+            particles.back().pos.x = hold_x;
+            particles.back().pos.y = hold_y;
+            particles.back().vel = {0, 0};
         }
     };
 
     game.on_draw = [&]() {
-        spring.draw(game);
-        dbg_draw_info(game, spring);
+        for (auto& spring : springs) {
+            spring.draw(game);
+        }
+        for (auto& p : particles) {
+            if (!p.locked) {
+                p.draw(game);
+            }
+        }
+        dbg_draw_info(game);
     };
     
     game.on_event = [&](const SDL_Event& e) {
@@ -213,42 +236,43 @@ int main(int, char**) {
         }
 
         if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_w) {
-            spring.stiffness += 10.0f;
+            stiffness += 10.0f;
         }
         if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_q) {
-            spring.stiffness -= 10.0f;
-            if (spring.stiffness < 1.0f) spring.stiffness = 1.0f;
+            stiffness -= 10.0f;
+            if (stiffness < 1.0f) stiffness = 1.0f;
         }
         if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_s) {
-            gravity += 200.0f;
+            gravity += 10.0f;
         }
         if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_a) {
-            gravity -= 200.0f;
+            gravity -= 10.0f;
         }
         if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_t) {
-            spring.restLength += 10.0f;
+            restLength += 10.0f;
         }
         if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_r) {
-            spring.restLength -= 10.0f;
-            if (spring.restLength < 0.0f) spring.restLength = 0.0f;
+            restLength -= 10.0f;
+            if (restLength < 0.0f) restLength = 0.0f;
         }
-
-
+        if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_g) {
+            do_draw_trail = !do_draw_trail;
+        }
     };
 
     game.run();
     return 0;
 }
 
-void dbg_draw_info(lvichki::Window& game, SpringJoint& spring) {
+void dbg_draw_info(lvichki::Window& game) {
     int y = 55;
-    //game.draw_text( ("extension: " + to_string(spring.extension)).c_str(), 30, y += 30);
     //game.draw_text( ("dt: " + to_string(game.dt)).c_str(), 30, y += 30);
-    stringstream ss;
-    ss << fixed << setprecision(2) << "velocity: " << spring.bob.vel.x << ", " << spring.bob.vel.y;
-    game.draw_text(ss.str().c_str(), 30, y += 30);
-    game.draw_text("Q/W to adjust stiffness, A/S gravity, R/T rest length", 30, y += 30, purple);
-    game.draw_text( ("stiffness: " + to_string((int) spring.stiffness)).c_str(), 30, y += 30);
+    //stringstream ss; ss << fixed << setprecision(2) << "velocity: " << spring.bob.vel.x << ", " << spring.bob.vel.y;
+    //game.draw_text(ss.str().c_str(), 30, y += 30);
+    game.draw_text("Q/W to adjust stiffness, A/S gravity, R/T rest length, G to toggle trail", 30, y += 30, purple);
+    game.draw_text( ("stiffness: " + to_string((int) stiffness)).c_str(), 30, y += 30);
     game.draw_text( ("gravity: " + to_string((int) gravity)).c_str(), 30, y += 30);
-    game.draw_text( ("rest length: " + to_string((int) spring.restLength)).c_str(), 30, y += 30);
+    game.draw_text( ("rest length: " + to_string((int) restLength)).c_str(), 30, y += 30);
+    game.draw_text( ("Segments no: " + to_string((int) segments_no)).c_str(), 30, y += 30);
+    game.draw_text( ("draw trail: " + to_string(do_draw_trail)).c_str(), 30, y += 30);
 }
