@@ -53,7 +53,7 @@ float dbg_max_force_seen = 0.0f;
 
 int main(int, char**) {
     cout << "=== START SPRING SIMULATON ===" << endl;
-    lvichki::Window win;
+    lvichki::Game win;
     
 
     float gravity = 1000.0f;

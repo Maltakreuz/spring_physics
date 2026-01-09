@@ -58,7 +58,7 @@ struct Particle {
     Particle() : pos(0, 0), vel(0, 0), acc(0, 0), mass(1.0f), locked(false) {}
     Particle(float x, float y) : pos(x, y), vel(0, 0), acc(0, 0), mass(1.0f), locked(false) {}
 
-    void update(lvichki::Window& game) {
+    void update(lvichki::Game& game) {
         if (locked) return;
         
         vel *= damping;
@@ -74,7 +74,7 @@ struct Particle {
 
 
 
-    void draw(lvichki::Window& game) {
+    void draw(lvichki::Game& game) {
         game.draw_circle((int)pos.x, (int)pos.y, radius, purple);
         draw_trail(game);
     }
@@ -83,7 +83,7 @@ struct Particle {
         acc += force / mass;
     }
 
-    void bounceOnWindowRect(lvichki::Window& game) {
+    void bounceOnWindowRect(lvichki::Game& game) {
         if (pos.x < 0) {
             pos.x = 0;
             vel.x *= -damping;
@@ -102,7 +102,7 @@ struct Particle {
         }
     }
 
-    void draw_trail(lvichki::Window& game) {
+    void draw_trail(lvichki::Game& game) {
         if (trail.size() > 1) {
             for (size_t i = 0; i < trail.size() - 1; ++i) {
                 // Вычисляем прозрачность (от 0 до 255)
@@ -138,7 +138,7 @@ struct SpringJoint {
     float stiffness;
     float extension;
 
-    void update(lvichki::Window& game) {
+    void update(lvichki::Game& game) {
         /**
          * calc spring force, the core of this example, based on
          * Hooke's law: F = -k * x
@@ -155,7 +155,7 @@ struct SpringJoint {
         anchor.update(game);
     }
 
-    void draw(lvichki::Window& game) {
+    void draw(lvichki::Game& game) {
         // Включаем режим смешивания цветов для прозрачности
         SDL_SetRenderDrawBlendMode(game.get_renderer(), SDL_BLENDMODE_BLEND);
         // just optics, make color dynamicly
@@ -169,11 +169,11 @@ struct SpringJoint {
     }
 };
 
-void dbg_draw_info(lvichki::Window& game, SpringJoint& spring);
+void dbg_draw_info(lvichki::Game& game, SpringJoint& spring);
 
 int main(int, char**) {
     cout << "=== START SPRING SIMULATON ===" << endl;
-    lvichki::Window game;
+    lvichki::Game game;
     SpringJoint spring;
     spring.anchor = { game.width / 2.0f, game.height / 2.0f };
     spring.bob = { game.width / 2.0f + 200, game.height / 2.0f + 200};
@@ -240,7 +240,7 @@ int main(int, char**) {
     return 0;
 }
 
-void dbg_draw_info(lvichki::Window& game, SpringJoint& spring) {
+void dbg_draw_info(lvichki::Game& game, SpringJoint& spring) {
     int y = 55;
     //game.draw_text( ("extension: " + to_string(spring.extension)).c_str(), 30, y += 30);
     //game.draw_text( ("dt: " + to_string(game.dt)).c_str(), 30, y += 30);

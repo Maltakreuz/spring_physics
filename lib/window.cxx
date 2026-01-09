@@ -7,8 +7,8 @@
 using namespace std;
 
 namespace lvichki {
-// TODO: rename it into game, it fits better + shift draw lines and circles code to separate file
-class Window {
+
+class Game {
 public:
     int width = 1080;
     int height = 1340; // 2184
@@ -22,7 +22,7 @@ public:
     uint64_t update_count = 0;
     uint64_t draw_count = 0;
 
-    Window() {
+    Game() {
         if (SDL_Init(SDL_INIT_VIDEO) < 0) {
             SDL_Log("SDL_Init error: %s", SDL_GetError());
             return;
@@ -64,7 +64,7 @@ public:
         is_valid = true;
     }
 
-    ~Window() {
+    ~Game() {
         if (font) TTF_CloseFont(font);
         if (renderer) SDL_DestroyRenderer(renderer);
         if (window)   SDL_DestroyWindow(window);

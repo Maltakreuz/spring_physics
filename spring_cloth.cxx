@@ -40,12 +40,14 @@ SDL_Color white = {255, 255, 255, 255};
 SDL_Color purple = {150, 100, 255, 255};
 
 const int max_trail_points = 500; // Длина шлейфа в кадрах
-float damping = 0.995f;
+float damping = 0.991f;
 float gravity = 30.0f;
 float restLength = 10.0f;
 float stiffness = 10.0f;
 int segments_no = 24;
 bool do_draw_trail = false;
+
+int dragged_particle_index = -1; // -1 означает, что ничего не захвачено
 
 struct Particle {
     Vec2 pos;
@@ -70,7 +72,7 @@ struct Particle {
         pos += vel * game.fixed_dt;
         acc = {0, 0};
 
-        bounceOnWindowRect(game);
+        //bounceOnWindowRect(game);
         update_trail();
     }
 
@@ -134,7 +136,7 @@ struct Particle {
 struct SpringJoint {
     Particle* anchor;
     Particle* bob;
-    float extension;
+    float extension = 0;
 
     void update() {
         /**
@@ -167,29 +169,145 @@ struct SpringJoint {
 
 void dbg_draw_info(lvichki::Game& game);
 
+void create_triangle(vector<Particle> &particles, vector<SpringJoint> &springs) {
+    particles.emplace_back(400, 400);
+    particles.emplace_back(300, 700);
+    particles.emplace_back(500, 700);
+
+    springs.push_back({ &particles[0], &particles[1] });
+    springs.push_back({ &particles[1], &particles[2] });
+    springs.push_back({ &particles[2], &particles[0] });
+
+    particles[0].locked = true;
+
+    restLength = 100;
+}
+
+void create_quad(vector<Particle> &particles, vector<SpringJoint> &springs) {
+    particles.emplace_back(400, 400);
+    particles.emplace_back(400, 800);
+    particles.emplace_back(800, 800);
+    particles.emplace_back(800, 400);
+
+    springs.push_back({ &particles[0], &particles[1] });
+    springs.push_back({ &particles[1], &particles[2] });
+    springs.push_back({ &particles[2], &particles[3] });
+    springs.push_back({ &particles[3], &particles[0] });
+
+    springs.push_back({ &particles[0], &particles[2] });
+    springs.push_back({ &particles[1], &particles[3] });
+
+    particles[0].locked = true;
+
+    restLength = 300;
+    stiffness = 200;
+}
+
+void create_quad_bridge(vector<Particle> &particles, vector<SpringJoint> &springs) {
+    int segments = 10;     // Количество сегментов моста
+    float size = 50.0f;    // Размер одного квадрата
+    float start_x = 200;
+    float start_y = 400;
+
+    // 1. Создаем частицы (верхний и нижний ряд)
+    for (int i = 0; i <= segments; i++) {
+        particles.emplace_back(start_x + i * size, start_y);          // Верхняя точка
+        particles.emplace_back(start_x + i * size, start_y + size);   // Нижняя точка
+    }
+
+    // 2. Создаем пружины
+    for (int i = 0; i < segments; i++) {
+        int top_curr = i * 2;
+        int bot_curr = i * 2 + 1;
+        int top_next = (i + 1) * 2;
+        int bot_next = (i + 1) * 2 + 1;
+
+        // Вертикальная связь (текущая секция)
+        springs.push_back({ &particles[top_curr], &particles[bot_curr] });
+        
+        // Горизонтальные связи
+        springs.push_back({ &particles[top_curr], &particles[top_next] });
+        springs.push_back({ &particles[bot_curr], &particles[bot_next] });
+
+        // Диагональные связи (крест-накрест для жесткости)
+        springs.push_back({ &particles[top_curr], &particles[bot_next] });
+        springs.push_back({ &particles[bot_curr], &particles[top_next] });
+    }
+    
+    // Замыкающая вертикаль в конце
+    springs.push_back({ &particles[segments * 2], &particles[segments * 2 + 1] });
+
+    // 3. Закрепляем края (первую и последнюю пару)
+    particles[0].locked = true;
+    particles[1].locked = true;
+    particles[segments * 2].locked = true;
+    particles[segments * 2 + 1].locked = true;
+
+    restLength = size;
+    stiffness = 100;
+    gravity = 1000.0f;
+}
+
+void create_cloth(vector<Particle> &particles, vector<SpringJoint> &springs) {
+    int cols = 66;
+    int rows = 21;
+    
+    float spacing = 10.0f;
+    float start_x = 40;
+    float start_y = 200;
+
+    // 1. Создаем сетку частиц
+    for (int y = 0; y < rows; y++) {
+        for (int x = 0; x < cols; x++) {
+            particles.emplace_back(start_x + x * spacing, start_y + y * spacing);
+            
+            // Закрепляем весь верхний ряд
+            if (y == 0) {
+                particles.back().locked = true;
+            }
+        }
+    }
+
+    // 2. Соединяем пружинами
+    for (int y = 0; y < rows; y++) {
+        for (int x = 0; x < cols; x++) {
+            int current = y * cols + x;
+
+            // Горизонтальная связь (Structural)
+            if (x < cols - 1) {
+                springs.push_back({ &particles[current], &particles[current + 1] });
+            }
+            // Вертикальная связь (Structural)
+            if (y < rows - 1) {
+                springs.push_back({ &particles[current], &particles[current + cols] });
+            }
+            // Диагонали (Shear)
+            if (x < cols - 1 && y < rows - 1) {
+                // Сверху-слева направо-вниз
+                springs.push_back({ &particles[current], &particles[current + cols + 1] });
+                // Сверху-справа налево-вниз
+                springs.push_back({ &particles[current + 1], &particles[current + cols] });
+            }
+        }
+    }
+
+    restLength = spacing;
+    stiffness = 100;
+    gravity = 800.0f;
+}
+
+
 int main(int, char**) {
     cout << "=== START SPRING SIMULATON ===" << endl;
     lvichki::Game game;
 
     
     vector<Particle> particles;
-    particles.reserve(segments_no);
-
-    float startX = game.width / 2.0f;
-    float startY = 100.0f;
-
-    for (int i = 0; i < segments_no; i++) {
-        particles.emplace_back(startX, startY + i * restLength);
-    }
-
-    particles[0].locked = true;
-
     vector<SpringJoint> springs;
-    springs.reserve(segments_no - 1);
+    //create_quad_bridge(particles, springs);
+    create_cloth(particles, springs);
 
-    for (int i = 0; i < segments_no - 1; i++) {
-        springs.push_back({ &particles[i], &particles[i+1], 0 });
-    }
+    
 
     game.on_update = [&]() {
         for (auto& spring : springs) {
@@ -199,9 +317,9 @@ int main(int, char**) {
             p.update(game);
         }
         if (hold_by_mouse_or_finger) {
-            particles.back().pos.x = hold_x;
-            particles.back().pos.y = hold_y;
-            particles.back().vel = {0, 0};
+            particles[dragged_particle_index].pos.x = hold_x;
+            particles[dragged_particle_index].pos.y = hold_y;
+            particles[dragged_particle_index].vel = {0, 0};
         }
     };
 
@@ -218,21 +336,47 @@ int main(int, char**) {
     };
     
     game.on_event = [&](const SDL_Event& e) {
-        hold_by_mouse_or_finger = false;
-        if (e.type == SDL_FINGERDOWN || e.type == SDL_FINGERMOTION) {
-            hold_x = e.tfinger.x * game.width;
-            hold_y = e.tfinger.y * game.height;
+        if (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_FINGERDOWN) {
             hold_by_mouse_or_finger = true;
-        }
-        else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
-            hold_x = e.button.x;
-            hold_y = e.button.y;
-            hold_by_mouse_or_finger = true;
-        }
-        else if (e.type == SDL_MOUSEMOTION && (e.motion.state & SDL_BUTTON_LMASK)) {
-            hold_x = e.motion.x;
-            hold_y = e.motion.y;
-            hold_by_mouse_or_finger = true;
+            
+            // Получаем координаты клика
+            if (e.type == SDL_FINGERDOWN) {
+                hold_x = e.tfinger.x * game.width;
+                hold_y = e.tfinger.y * game.height;
+            } else {
+                hold_x = e.button.x;
+                hold_y = e.button.y;
+            }
+
+            // --- ПОИСК БЛИЖАЙШЕЙ ЧАСТИЦЫ ---
+            float min_dist = 1000000.0f;
+            dragged_particle_index = -1;
+            
+            for (size_t i = 0; i < particles.size(); i++) {
+                float dx = particles[i].pos.x - hold_x;
+                float dy = particles[i].pos.y - hold_y;
+                float dist_sq = dx*dx + dy*dy; // Используем квадрат расстояния (быстрее)
+                
+                if (dist_sq < min_dist) {
+                    min_dist = dist_sq;
+                    dragged_particle_index = i;
+                }
+            }
+            // Опционально: можно добавить проверку min_dist < 50*50, 
+            // чтобы не хватать частицу с другого конца экрана.
+        } else if (e.type == SDL_MOUSEMOTION || e.type == SDL_FINGERMOTION) {
+            if (hold_by_mouse_or_finger) {
+                if (e.type == SDL_FINGERMOTION) {
+                    hold_x = e.tfinger.x * game.width;
+                    hold_y = e.tfinger.y * game.height;
+                } else {
+                    hold_x = e.motion.x;
+                    hold_y = e.motion.y;
+                }
+            }
+        } else if (e.type == SDL_MOUSEBUTTONUP || e.type == SDL_FINGERUP) {
+            hold_by_mouse_or_finger = false;
+            dragged_particle_index = -1;
         }
 
         if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_w) {
